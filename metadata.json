@@ -1,0 +1,6 @@
+{
+  "name": "Apex 3D Arena Brawler",
+  "description": "High-octane 3D arena brawler featuring fluid martial arts combos, timed parries, guard breaking, and visceral arcade combat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
