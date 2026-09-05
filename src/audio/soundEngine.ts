@@ -7,9 +7,15 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
   private isMuted: boolean = false;
   private isLowHealthActive: boolean = false;
   private heartbeatInterval: number | null = null;
+
+  // Volume Levels (0 to 1)
+  private masterVolume: number = 0.8;
+  private musicVolume: number = 0.7;
+  private sfxVolume: number = 0.85;
 
   // Dynamic Music Engine
   private isMusicRunning: boolean = false;
@@ -34,12 +40,17 @@ class SoundEngine {
       this.ctx = new AudioContextClass();
 
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVolume * 0.75, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
+
+      // SFX sub-bus
+      this.sfxGain = this.ctx.createGain();
+      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
+      this.sfxGain.connect(this.masterGain);
 
       // Music sub-bus
       this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+      this.musicGain.gain.setValueAtTime(this.musicVolume * 0.35, this.ctx.currentTime);
       this.musicGain.connect(this.masterGain);
 
       // Create stem gains for dynamic combo intensity
@@ -66,15 +77,53 @@ class SoundEngine {
     }
   }
 
+  public getSfxBus(): AudioNode {
+    this.initCtx();
+    return this.sfxGain || this.masterGain || this.ctx!.destination;
+  }
+
   public setMuted(muted: boolean) {
     this.isMuted = muted;
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(muted ? 0 : 0.7, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(muted ? 0 : this.masterVolume * 0.75, this.ctx.currentTime);
     }
   }
 
   public getMuted() {
     return this.isMuted;
+  }
+
+  public setMasterVolume(vol: number) {
+    this.masterVolume = Math.max(0, Math.min(1, vol));
+    if (this.masterGain && this.ctx && !this.isMuted) {
+      this.masterGain.gain.setValueAtTime(this.masterVolume * 0.75, this.ctx.currentTime);
+    }
+  }
+
+  public setMusicVolume(vol: number) {
+    this.musicVolume = Math.max(0, Math.min(1, vol));
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setValueAtTime(this.musicVolume * 0.35, this.ctx.currentTime);
+    }
+  }
+
+  public setSfxVolume(vol: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, vol));
+    if (this.sfxGain && this.ctx) {
+      this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.ctx.currentTime);
+    }
+  }
+
+  public getMasterVolume(): number {
+    return this.masterVolume;
+  }
+
+  public getMusicVolume(): number {
+    return this.musicVolume;
+  }
+
+  public getSfxVolume(): number {
+    return this.sfxVolume;
   }
 
   // ==========================================
@@ -654,6 +703,254 @@ class SoundEngine {
     gain.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + (tier === 'lethal' ? 0.5 : 0.28));
+  }
+
+  // ==========================================
+  // NEW VISCERAL COMBAT & BOSS / LASER SFX
+  // ==========================================
+
+  public playLaserCharge() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.8;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, t);
+    osc.frequency.exponentialRampToValueAtTime(1400, t + duration);
+
+    gain.gain.setValueAtTime(0.01, t);
+    gain.gain.linearRampToValueAtTime(0.4, t + duration * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  public playLaserBeam() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.5;
+
+    // Sizzling plasma noise + high-intensity sawtooth
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(750, t);
+    osc.frequency.linearRampToValueAtTime(320, t + duration);
+
+    oscGain.gain.setValueAtTime(0.65, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    // Plasma sizzle noise
+    const buf = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * duration), this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.7;
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(3500, t);
+    filter.Q.setValueAtTime(3.0, t);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.5, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.getSfxBus());
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(this.getSfxBus());
+
+    osc.start(t);
+    osc.stop(t + duration);
+    noise.start(t);
+    noise.stop(t + duration);
+  }
+
+  public playBossRoar() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 1.2;
+
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sawtooth';
+    sub.frequency.setValueAtTime(90, t);
+    sub.frequency.linearRampToValueAtTime(45, t + duration);
+
+    subGain.gain.setValueAtTime(0.85, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    const roar = this.ctx.createOscillator();
+    const roarGain = this.ctx.createGain();
+    roar.type = 'triangle';
+    roar.frequency.setValueAtTime(160, t);
+    roar.frequency.exponentialRampToValueAtTime(55, t + duration);
+
+    roarGain.gain.setValueAtTime(0.7, t);
+    roarGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    sub.connect(subGain);
+    subGain.connect(this.getSfxBus());
+    roar.connect(roarGain);
+    roarGain.connect(this.getSfxBus());
+
+    sub.start(t);
+    sub.stop(t + duration);
+    roar.start(t);
+    roar.stop(t + duration);
+  }
+
+  public playBossSlam() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.7;
+
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(25, t + duration);
+
+    oscGain.gain.setValueAtTime(1.0, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  public playBloodSplatter() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.22;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(450, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + duration);
+
+    gain.gain.setValueAtTime(0.65, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  public playPerfectDodge() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.45;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, t);
+    osc.frequency.exponentialRampToValueAtTime(1760, t + 0.15);
+    osc.frequency.exponentialRampToValueAtTime(1320, t + duration);
+
+    gain.gain.setValueAtTime(0.55, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  public playLaserFire(isBoss = false) {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = isBoss ? 0.7 : 0.25;
+
+    // High energy plasma discharge
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(isBoss ? 980 : 1800, t);
+    osc.frequency.exponentialRampToValueAtTime(isBoss ? 160 : 340, t + duration);
+
+    gain.gain.setValueAtTime(isBoss ? 0.7 : 0.45, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    // Filter for laser sizzle
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(isBoss ? 1200 : 2400, t);
+    filter.Q.setValueAtTime(3.5, t);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+
+  public playBossSpawn() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+
+    // Menacing sub-bass horn
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(65, t);
+    osc.frequency.linearRampToValueAtTime(82, t + 0.6);
+    osc.frequency.linearRampToValueAtTime(55, t + 1.8);
+
+    gain.gain.setValueAtTime(0.85, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(450, t);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + 2.0);
+  }
+
+  public playBossSmash() {
+    this.initCtx();
+    if (!this.ctx || !this.masterGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const duration = 0.8;
+
+    // Heavy crater slam
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(30, t + duration);
+
+    gain.gain.setValueAtTime(0.95, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(gain);
+    gain.connect(this.getSfxBus());
+    osc.start(t);
+    osc.stop(t + duration);
   }
 }
 

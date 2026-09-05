@@ -1,4 +1,4 @@
-import { FinisherDef, FinisherId, UpgradeDef, UpgradeId, WeaponDef, WeaponId } from '../types';
+import { AddonDef, AddonId, FinisherDef, FinisherId, UpgradeDef, UpgradeId, WeaponDef, WeaponId } from '../types';
 
 export const INITIAL_WEAPONS: Record<WeaponId, WeaponDef> = {
   katana: {
@@ -55,6 +55,20 @@ export const INITIAL_WEAPONS: Record<WeaponId, WeaponDef> = {
     rangeMultiplier: 1.5,
     bladeColor: '#06b6d4',
     emissiveColor: '#0891b2',
+    unlocked: false,
+  },
+  laser_scythe: {
+    id: 'laser_scythe',
+    name: 'Quantum Laser Scythe',
+    tagline: 'High-Frequency Beam Reaper',
+    desc: '+85% strike damage, emits lingering energy trails and high critical posture crush. Glides through heavy defenses.',
+    cost: 5500,
+    damageMultiplier: 1.85,
+    poiseMultiplier: 2.0,
+    speedMultiplier: 1.1,
+    rangeMultiplier: 1.6,
+    bladeColor: '#10b981',
+    emissiveColor: '#059669',
     unlocked: false,
   },
 };
@@ -169,5 +183,70 @@ export const INITIAL_FINISHERS: Record<FinisherId, FinisherDef> = {
   },
 };
 
+export const INITIAL_ADDONS: Record<AddonId, AddonDef> = {
+  laser_drone: {
+    id: 'laser_drone',
+    name: 'Tactical Orbital Drone',
+    tagline: 'Autonomous Directed-Energy Companion',
+    desc: 'Hovers alongside the player and periodically fires piercing emerald laser beams at the nearest hostile.',
+    cost: 1800,
+    unlocked: false,
+    equipped: false,
+    color: '#10b981',
+  },
+  plasma_wave: {
+    id: 'plasma_wave',
+    name: 'Kinetic Plasma Capacitor',
+    tagline: 'Ranged Blade Projectile Surge',
+    desc: 'Heavy attacks unleash an overcharged plasma laser crescent cutting through groups of enemies.',
+    cost: 2200,
+    unlocked: false,
+    equipped: false,
+    color: '#06b6d4',
+  },
+  vampiric_core: {
+    id: 'vampiric_core',
+    name: 'Vampiric Leech Field',
+    tagline: 'Bio-Synthetic Vitality Siphon',
+    desc: 'Restores +12 HP upon cinematic executions and +4 HP every 10 consecutive combo strikes.',
+    cost: 1600,
+    unlocked: false,
+    equipped: false,
+    color: '#f43f5e',
+  },
+  chrono_dodge: {
+    id: 'chrono_dodge',
+    name: 'Temporal Matrix Accelerator',
+    tagline: 'Sub-Second Bullet Time Counter',
+    desc: 'Perfect evasive dodges briefly dilate time by 70%, exposing enemies to instantaneous counter-strikes.',
+    cost: 2600,
+    unlocked: false,
+    equipped: false,
+    color: '#eab308',
+  },
+  arc_chain: {
+    id: 'arc_chain',
+    name: 'Tesla Arc Disruptor',
+    tagline: 'High-Voltage Stun Overload',
+    desc: 'The 3rd hit of a light attack chain discharges chaining electric lightning into up to 3 nearby enemies.',
+    cost: 2000,
+    unlocked: false,
+    equipped: false,
+    color: '#a855f7',
+  },
+  nanite_repair: {
+    id: 'nanite_repair',
+    name: 'Nanite Biomech Suture',
+    tagline: 'Autonomous Cellular Regeneration',
+    desc: 'Continuously synthesizes cellular tissue, regenerating 3 HP every 3 seconds during combat.',
+    cost: 1500,
+    unlocked: false,
+    equipped: false,
+    color: '#34d399',
+  },
+};
+
 export const WEAPONS = INITIAL_WEAPONS;
 export const FINISHERS = INITIAL_FINISHERS;
+export const ADDONS = INITIAL_ADDONS;
+

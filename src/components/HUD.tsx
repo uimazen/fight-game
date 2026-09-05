@@ -32,6 +32,10 @@ export const HUD: React.FC<HUDProps> = ({ onVirtualAction }) => {
   const startTutorial = useGameStore((s) => s.startTutorial);
   const isTutorialActive = useGameStore((s) => s.isTutorialActive);
   const canExecuteTarget = useGameStore((s) => s.canExecuteTarget);
+  const activeBoss = useGameStore((s) => s.activeBoss);
+
+  const comboMultiplier = combo <= 0 ? 1.0 : Math.min(3.0, 1.0 + Math.floor(combo / 5) * 0.25);
+  const hitsToNextMultiplier = combo > 0 ? (5 - (combo % 5 === 0 ? 5 : combo % 5)) : 5;
 
   // 'R' key for instant restart
   useEffect(() => {
@@ -180,6 +184,41 @@ export const HUD: React.FC<HUDProps> = ({ onVirtualAction }) => {
         </div>
       </div>
 
+      {/* Boss Encounter HUD Banner */}
+      {activeBoss && (
+        <div className="w-full max-w-xl mx-auto -mt-2 mb-2 pointer-events-none flex flex-col gap-1 items-center animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex justify-between w-full text-xs font-black font-['Chakra_Petch'] tracking-widest text-red-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block" />
+              BOSS // {activeBoss.name.toUpperCase()}
+            </span>
+            <span className="font-mono text-red-300">
+              {Math.round(activeBoss.health)} / {activeBoss.maxHealth} HP (PHASE {activeBoss.phase})
+            </span>
+          </div>
+
+          {/* Health Bar */}
+          <div className="w-full h-3.5 bg-slate-950/90 border border-red-800/80 rounded-sm overflow-hidden shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+            <div
+              className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 transition-all duration-75"
+              style={{ width: `${Math.max(0, Math.min(100, (activeBoss.health / activeBoss.maxHealth) * 100))}%` }}
+            />
+          </div>
+
+          {/* Stagger / Posture Gauge */}
+          <div className="w-full flex items-center justify-between text-[10px] font-bold text-amber-400/90 tracking-wider">
+            <span>STAGGER VULNERABILITY</span>
+            <span>{Math.round(Math.min(100, (activeBoss.posture / activeBoss.maxPosture) * 100))}%</span>
+          </div>
+          <div className="w-full h-1.5 bg-slate-950/80 border border-slate-800 rounded-sm overflow-hidden">
+            <div
+              className="h-full bg-amber-400 transition-all duration-75"
+              style={{ width: `${Math.min(100, (activeBoss.posture / activeBoss.maxPosture) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Cinematic Anamorphic Letterboxing Overlay during Finisher Execution */}
       {executionCinematic.active && (
         <div className="fixed inset-0 pointer-events-none z-30 flex flex-col justify-between">
@@ -240,6 +279,30 @@ export const HUD: React.FC<HUDProps> = ({ onVirtualAction }) => {
         <div className="flex items-end gap-3">
           {combo > 0 ? (
             <div className="flex flex-col">
+              {/* Combo Multiplier UI Badge */}
+              <div className="flex items-center gap-2 mb-1">
+                <div 
+                  className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded border text-xs font-black font-['Chakra_Petch'] tracking-wider shadow-md transition-all ${
+                    comboMultiplier >= 3.0
+                      ? 'bg-fuchsia-950/90 border-fuchsia-400 text-fuchsia-300 shadow-[0_0_15px_rgba(217,70,239,0.6)] animate-pulse'
+                      : comboMultiplier >= 2.0
+                      ? 'bg-rose-950/90 border-rose-400 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+                      : comboMultiplier >= 1.5
+                      ? 'bg-amber-950/90 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                      : 'bg-cyan-950/90 border-cyan-400 text-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
+                  }`}
+                >
+                  <Zap size={13} className="animate-bounce" />
+                  <span>x{comboMultiplier.toFixed(2)} MULTIPLIER</span>
+                </div>
+
+                {comboMultiplier < 3.0 && (
+                  <span className="text-[10px] font-bold text-slate-400 tracking-wider">
+                    {hitsToNextMultiplier} HITS TO NEXT TIER
+                  </span>
+                )}
+              </div>
+
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl md:text-6xl font-black font-['Chakra_Petch'] italic text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
                   {combo}
@@ -249,12 +312,24 @@ export const HUD: React.FC<HUDProps> = ({ onVirtualAction }) => {
                 </span>
               </div>
 
-              {/* Combo Decay Bar */}
-              <div className="w-36 h-1.5 bg-slate-900 rounded overflow-hidden border border-slate-700 mt-1">
-                <div
-                  className="h-full bg-cyan-400 transition-all duration-75"
-                  style={{ width: `${comboTimerPct}%` }}
-                />
+              {/* Combo Decay Bar & Grace Pause Status */}
+              <div className="flex flex-col gap-0.5 mt-1">
+                <div className="w-44 h-2 bg-slate-950/90 rounded overflow-hidden border border-slate-700/80">
+                  <div
+                    className={`h-full transition-all duration-75 ${
+                      comboTimer < 1.2 ? 'bg-red-500 animate-pulse' : 'bg-cyan-400'
+                    }`}
+                    style={{ width: `${comboTimerPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-mono tracking-wider font-bold">
+                  {comboTimer < 1.2 ? (
+                    <span className="text-red-400 animate-pulse">PAUSE: RESETTING IN {comboTimer.toFixed(1)}s</span>
+                  ) : (
+                    <span className="text-slate-400">STREAK ACTIVE • {comboTimer.toFixed(1)}s</span>
+                  )}
+                  <span className="text-amber-400 font-black font-['Chakra_Petch']">MAX {maxCombo}x</span>
+                </div>
               </div>
 
               {/* Style Rank Badge */}

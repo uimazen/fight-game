@@ -26,6 +26,11 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
   const setIFrames = useGameStore((s) => s.setIFrames);
   const setTargetEnemy = useGameStore((s) => s.setTargetEnemy);
   const feedback = useGameStore((s) => s.feedback);
+  const triggerShake = useGameStore((s) => s.triggerShake);
+  const triggerHitFX = useGameStore((s) => s.triggerHitFX);
+  const addLaserBeam = useGameStore((s) => s.addLaserBeam);
+  const heal = useGameStore((s) => s.heal);
+  const addons = useGameStore((s) => s.addons);
 
   // Shop & Progression hooks
   const equippedWeapon = useGameStore((s) => s.equippedWeapon);
@@ -43,6 +48,8 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
   const inputBuffer = useRef<string | null>(null);
   const canCancelRecovery = useRef(false);
   const attackHitsDealt = useRef(false);
+  const droneTimer = useRef(0);
+  const naniteTimer = useRef(0);
 
   // Input states
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -450,6 +457,7 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
       if (p >= 0.45 && !attackHitsDealt.current) {
         attackHitsDealt.current = true;
         checkHitCollision(58, 48, 2.8, 'light_3', true);
+        triggerShake(0.42, 0.22);
       }
 
       if (p >= 0.75) canCancelRecovery.current = true;
@@ -484,6 +492,38 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
         attackHitsDealt.current = true;
         // Guard-breaker: 65 damage, 75 posture damage, heavy knockback
         checkHitCollision(65, 75, 2.8, 'heavy', true);
+        triggerShake(0.65, 0.32);
+
+        // Plasma Wave Add-on: shoots cutting crescent beam forward!
+        if (addons.plasma_wave?.equipped) {
+          soundEngine.playLaserFire(false);
+          const fwdX = Math.sin(rotationY.current);
+          const fwdZ = Math.cos(rotationY.current);
+          addLaserBeam({
+            start: [position.current.x, 1.2, position.current.z],
+            end: [position.current.x + fwdX * 12, 1.2, position.current.z + fwdZ * 12],
+            color: '#06b6d4',
+            width: 0.32,
+            duration: 0.28,
+          });
+
+          // Check line intersection damage against enemies
+          for (const e of enemies) {
+            if (e.health <= 0 || e.state === 'dead' || e.state === 'executed') continue;
+            const ex = e.position[0] - position.current.x;
+            const ez = e.position[2] - position.current.z;
+            const proj = ex * fwdX + ez * fwdZ;
+            if (proj > 0.5 && proj < 12) {
+              const perpDist = Math.abs(ex * fwdZ - ez * fwdX);
+              if (perpDist < 1.9) {
+                e.health = Math.max(0, e.health - 45);
+                e.posture = Math.min(e.maxPosture, e.posture + 40);
+                triggerHitFX([e.position[0], 1.2, e.position[2]], 'spark', 16, '#06b6d4');
+                registerHitLanded(e.id, 45, 40, [e.position[0], 1.2, e.position[2]], 'heavy');
+              }
+            }
+          }
+        }
       }
 
       if (animProgress.current >= 1.0) {
@@ -575,6 +615,52 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
       meshRef.current.rotation.y = rotationY.current;
     }
 
+    // Tactical Laser Drone Add-on auto-fire
+    if (addons.laser_drone?.equipped && gameState === 'playing') {
+      droneTimer.current += delta;
+      if (droneTimer.current >= 2.2) {
+        // Find nearest alive enemy within 11 units
+        let nearestEnemy: (typeof enemies)[0] | null = null;
+        let minDist = 11;
+        for (const e of enemies) {
+          if (e.health <= 0 || e.state === 'dead' || e.state === 'executed') continue;
+          const d = Math.hypot(e.position[0] - position.current.x, e.position[2] - position.current.z);
+          if (d < minDist) {
+            minDist = d;
+            nearestEnemy = e;
+          }
+        }
+        if (nearestEnemy) {
+          droneTimer.current = 0;
+          soundEngine.playLaserFire(false);
+          const droneX = position.current.x - 0.75;
+          const droneY = position.current.y + 1.85;
+          const droneZ = position.current.z - 0.4;
+          const enemyPos: [number, number, number] = [nearestEnemy.position[0], 1.2, nearestEnemy.position[2]];
+          addLaserBeam({
+            start: [droneX, droneY, droneZ],
+            end: enemyPos,
+            color: '#10b981',
+            width: 0.16,
+            duration: 0.22,
+          });
+          nearestEnemy.health = Math.max(0, nearestEnemy.health - 35);
+          nearestEnemy.posture = Math.min(nearestEnemy.maxPosture, nearestEnemy.posture + 25);
+          triggerHitFX(enemyPos, 'spark', 14, '#10b981');
+          registerHitLanded(nearestEnemy.id, 35, 25, enemyPos, 'light_1');
+        }
+      }
+    }
+
+    // Nanite Repair Add-on regeneration
+    if (addons.nanite_repair?.equipped && gameState === 'playing') {
+      naniteTimer.current += delta;
+      if (naniteTimer.current >= 3.0) {
+        naniteTimer.current = 0;
+        heal(3);
+      }
+    }
+
     // Notify camera & parent
     onPositionUpdate(position.current, isMoving);
   });
@@ -661,6 +747,27 @@ export const Player: React.FC<PlayerProps> = ({ onPositionUpdate, enemies }) => 
         equippedWeapon={equippedWeapon}
         finisherId={equippedFinisher}
       />
+
+      {/* Tactical Laser Drone Floating Companion */}
+      {addons.laser_drone?.equipped && (
+        <group position={[-0.75, 1.85, -0.3]}>
+          {/* Drone Chassis */}
+          <mesh>
+            <sphereGeometry args={[0.16, 12, 12]} />
+            <meshStandardMaterial color="#0f172a" roughness={0.3} metalness={0.9} />
+          </mesh>
+          {/* Emerald Laser Optics Lens */}
+          <mesh position={[0, 0, 0.14]}>
+            <sphereGeometry args={[0.07, 8, 8]} />
+            <meshBasicMaterial color="#10b981" />
+          </mesh>
+          {/* Orbiting Laser Plasma Ring */}
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.22, 0.26, 24]} />
+            <meshBasicMaterial color="#10b981" transparent opacity={0.85} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 };

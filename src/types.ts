@@ -14,7 +14,7 @@ export type CombatState =
   | 'guard_break_recovery'
   | 'dead';
 
-export type WeaponId = 'katana' | 'dual_blades' | 'greatsword' | 'glaive';
+export type WeaponId = 'katana' | 'dual_blades' | 'greatsword' | 'glaive' | 'laser_scythe';
 
 export interface WeaponDef {
   id: WeaponId;
@@ -44,6 +44,19 @@ export interface UpgradeDef {
   statBonusPerTier: string;
 }
 
+export type AddonId = 'laser_drone' | 'plasma_wave' | 'vampiric_core' | 'chrono_dodge' | 'arc_chain' | 'nanite_repair';
+
+export interface AddonDef {
+  id: AddonId;
+  name: string;
+  tagline: string;
+  desc: string;
+  cost: number;
+  unlocked: boolean;
+  equipped: boolean;
+  color: string;
+}
+
 export type FinisherId = 'omni_slash' | 'judgement_guillotine' | 'thunderclap' | 'void_singularity';
 
 export interface FinisherDef {
@@ -69,7 +82,7 @@ export interface ExecutionCinematicState {
   climaxTriggered: boolean;
 }
 
-export type EnemyType = 'grunt' | 'brute' | 'elite';
+export type EnemyType = 'grunt' | 'brute' | 'elite' | 'boss';
 
 export type EnemyAIState = 
   | 'patrol' 
@@ -82,6 +95,9 @@ export type EnemyAIState =
   | 'poise_broken' 
   | 'poise_recovering'
   | 'executed' 
+  | 'laser_charge'
+  | 'laser_sweep'
+  | 'jump_slam'
   | 'dead';
 
 export interface EnemyData {
@@ -99,6 +115,32 @@ export interface EnemyData {
   targetPos?: [number, number, number];
   staggerDuration: number;
   velocity: [number, number, number];
+  laserAngle?: number;
+  laserProgress?: number;
+  bossPhase?: number;
+}
+
+export type HitFXType = 'spark' | 'blood' | 'heavy_blast' | 'parry_flash' | 'laser_burn' | 'boss_smash';
+
+export interface HitFXEvent {
+  id: string;
+  position: [number, number, number];
+  type: HitFXType;
+  count: number;
+  color?: string;
+  createdAt: number;
+}
+
+export interface LaserBeamData {
+  id: string;
+  start: [number, number, number];
+  end: [number, number, number];
+  color: string;
+  width: number;
+  createdAt: number;
+  duration: number;
+  progress: number;
+  isDangerous?: boolean;
 }
 
 export interface FloatingText {

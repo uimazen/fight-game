@@ -1,8 +1,24 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { UPGRADE_CONFIGS, INITIAL_WEAPONS, INITIAL_FINISHERS } from '../data/arsenal';
-import { WeaponId, UpgradeId, FinisherId } from '../types';
-import { Swords, ShieldAlert, Sparkles, X, Check, Lock, Zap, Award, Coins } from 'lucide-react';
+import { UPGRADE_CONFIGS, INITIAL_WEAPONS, INITIAL_FINISHERS, INITIAL_ADDONS } from '../data/arsenal';
+import { WeaponId, UpgradeId, FinisherId, AddonId } from '../types';
+import { soundEngine } from '../audio/soundEngine';
+import { 
+  Swords, 
+  Sparkles, 
+  X, 
+  Check, 
+  Lock, 
+  Zap, 
+  Award, 
+  Coins, 
+  Cpu, 
+  Volume2, 
+  VolumeX, 
+  Music, 
+  Volume1,
+  Radio
+} from 'lucide-react';
 
 export const ShopModal: React.FC = () => {
   const isShopOpen = useGameStore((s) => s.isShopOpen);
@@ -19,11 +35,25 @@ export const ShopModal: React.FC = () => {
   const upgrades = useGameStore((s) => s.upgrades);
   const buyUpgrade = useGameStore((s) => s.buyUpgrade);
 
+  const addons = useGameStore((s) => s.addons);
+  const buyAddon = useGameStore((s) => s.buyAddon);
+  const toggleEquipAddon = useGameStore((s) => s.toggleEquipAddon);
+
   const finishers = useGameStore((s) => s.finishers);
   const equippedFinisher = useGameStore((s) => s.equippedFinisher);
   const equipFinisher = useGameStore((s) => s.equipFinisher);
 
-  const [activeTab, setActiveTab] = useState<'weapons' | 'upgrades' | 'finishers'>('weapons');
+  // Audio Volumes
+  const isMuted = useGameStore((s) => s.isMuted);
+  const toggleMute = useGameStore((s) => s.toggleMute);
+  const masterVolume = useGameStore((s) => s.masterVolume);
+  const musicVolume = useGameStore((s) => s.musicVolume);
+  const sfxVolume = useGameStore((s) => s.sfxVolume);
+  const setMasterVolume = useGameStore((s) => s.setMasterVolume);
+  const setMusicVolume = useGameStore((s) => s.setMusicVolume);
+  const setSfxVolume = useGameStore((s) => s.setSfxVolume);
+
+  const [activeTab, setActiveTab] = useState<'weapons' | 'upgrades' | 'addons' | 'finishers' | 'audio'>('weapons');
 
   // Handle ESC or B key to close shop
   React.useEffect(() => {
@@ -41,12 +71,12 @@ export const ShopModal: React.FC = () => {
   if (!isShopOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md select-none font-['Rajdhani']">
-      <div className="relative w-full max-w-4xl bg-slate-900/95 border border-cyan-500/40 rounded-lg shadow-[0_0_40px_rgba(6,182,212,0.25)] flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md select-none font-['Rajdhani']">
+      <div className="relative w-full max-w-4xl bg-slate-900/95 border border-cyan-500/40 rounded-xl shadow-[0_0_50px_rgba(6,182,212,0.25)] flex flex-col max-h-[90vh] overflow-hidden">
         {/* HEADER BAR */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/70">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
+            <div className="p-2.5 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
               <Swords size={22} />
             </div>
             <div>
@@ -54,24 +84,37 @@ export const ShopModal: React.FC = () => {
                 ARSENAL & CYBER-FORGE
               </h2>
               <p className="text-xs text-slate-400 tracking-wide">
-                EQUIP WEAPONS, UPGRADE CYBERNETICS & UNLOCK LETHAL FINISHERS
+                EQUIP WEAPONS • CYBERNETIC ADD-ONS • AUDIO MIXER • FINISHERS
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Currency Pill */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-950/40 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-950/50 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
               <Coins size={18} className="text-amber-400" />
               <span className="font-mono font-bold text-amber-300 text-sm md:text-base">
                 {credits.toLocaleString()} CR
               </span>
             </div>
 
+            {/* Quick Audio Mute Toggle */}
+            <button
+              onClick={toggleMute}
+              className={`p-2 rounded-lg border transition ${
+                isMuted
+                  ? 'bg-rose-950/50 border-rose-500/50 text-rose-400'
+                  : 'bg-slate-800/80 border-slate-700 text-cyan-400 hover:border-cyan-500'
+              }`}
+              title={isMuted ? 'Unmute Audio' : 'Mute All Audio'}
+            >
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+
             {/* Close Button */}
             <button
               onClick={() => setShopOpen(false)}
-              className="p-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
               title="Close Arsenal (Esc / B)"
             >
               <X size={22} />
@@ -80,10 +123,10 @@ export const ShopModal: React.FC = () => {
         </div>
 
         {/* TABS NAVIGATION */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-6 pt-3 gap-2">
+        <div className="flex border-b border-slate-800 bg-slate-950/40 px-6 pt-3 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('weapons')}
-            className={`flex items-center gap-2 px-5 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition shrink-0 ${
               activeTab === 'weapons'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -95,7 +138,7 @@ export const ShopModal: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('upgrades')}
-            className={`flex items-center gap-2 px-5 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition shrink-0 ${
               activeTab === 'upgrades'
                 ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -106,8 +149,20 @@ export const ShopModal: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('addons')}
+            className={`flex items-center gap-2 px-4 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition shrink-0 ${
+              activeTab === 'addons'
+                ? 'border-emerald-400 text-emerald-300 bg-emerald-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Cpu size={16} />
+            ADD-ONS ({Object.values(addons).filter((a) => a.equipped).length} ACTIVE)
+          </button>
+
+          <button
             onClick={() => setActiveTab('finishers')}
-            className={`flex items-center gap-2 px-5 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition shrink-0 ${
               activeTab === 'finishers'
                 ? 'border-red-400 text-red-300 bg-red-950/20'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -115,6 +170,18 @@ export const ShopModal: React.FC = () => {
           >
             <Award size={16} />
             FINISHERS ({Object.values(finishers).filter((f) => f.unlocked).length}/4)
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audio')}
+            className={`flex items-center gap-2 px-4 py-2.5 font-['Chakra_Petch'] font-bold text-sm tracking-wider border-b-2 transition shrink-0 ${
+              activeTab === 'audio'
+                ? 'border-amber-400 text-amber-300 bg-amber-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Volume2 size={16} />
+            AUDIO MIXER
           </button>
         </div>
 
@@ -313,7 +380,114 @@ export const ShopModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: FINISHERS */}
+          {/* TAB 3: CYBERNETIC ADD-ONS */}
+          {activeTab === 'addons' && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
+                <Cpu size={16} className="text-emerald-400 shrink-0" />
+                <span>
+                  CYBERNETIC ADD-ONS: Equip passive augmentations that enhance laser attacks, lifesteal, electric chains, and temporal matrix dodges during combat.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(Object.keys(INITIAL_ADDONS) as AddonId[]).map((aid) => {
+                  const a = addons[aid] || INITIAL_ADDONS[aid];
+                  const isEquipped = a.equipped;
+                  const isUnlocked = a.unlocked;
+                  const canAfford = credits >= a.cost;
+
+                  return (
+                    <div
+                      key={aid}
+                      className={`p-4 rounded-lg border transition-all flex flex-col justify-between ${
+                        isEquipped
+                          ? 'bg-emerald-950/30 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+                          : isUnlocked
+                          ? 'bg-slate-800/60 border-slate-700 hover:border-slate-600'
+                          : 'bg-slate-900/50 border-slate-800 opacity-85'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: a.color, boxShadow: `0 0 10px ${a.color}` }}
+                              />
+                              <h3 className="font-['Chakra_Petch'] font-black text-lg text-white tracking-wider">
+                                {a.name}
+                              </h3>
+                            </div>
+                            <span className="text-[11px] font-mono text-cyan-400 font-bold tracking-wide">
+                              {a.tagline}
+                            </span>
+                          </div>
+
+                          {isEquipped ? (
+                            <span className="px-2.5 py-0.5 rounded text-[11px] font-bold tracking-wider bg-emerald-500 text-slate-950 font-['Chakra_Petch']">
+                              ACTIVE
+                            </span>
+                          ) : isUnlocked ? (
+                            <span className="px-2.5 py-0.5 rounded text-[11px] font-bold tracking-wider bg-slate-800 border border-slate-700 text-slate-300 font-['Chakra_Petch']">
+                              STANDBY
+                            </span>
+                          ) : (
+                            <span className="font-mono text-xs font-bold text-amber-400 flex items-center gap-1">
+                              <Coins size={14} /> {a.cost} CR
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-300 my-3 leading-relaxed">
+                          {a.desc}
+                        </p>
+                      </div>
+
+                      {/* Action */}
+                      <div className="pt-3 border-t border-slate-800/80">
+                        {isUnlocked ? (
+                          <button
+                            onClick={() => toggleEquipAddon(aid)}
+                            className={`w-full py-2 rounded text-xs font-bold font-['Chakra_Petch'] tracking-wider transition flex items-center justify-center gap-1.5 shadow ${
+                              isEquipped
+                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                            }`}
+                          >
+                            {isEquipped ? (
+                              <>
+                                <Check size={14} /> ACTIVE (CLICK TO UNEQUIP)
+                              </>
+                            ) : (
+                              <>
+                                <Cpu size={14} /> ACTIVATE ADD-ON
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => buyAddon(aid)}
+                            disabled={!canAfford}
+                            className={`w-full py-2 rounded text-xs font-bold font-['Chakra_Petch'] tracking-wider transition flex items-center justify-center gap-1.5 ${
+                              canAfford
+                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                                : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                            }`}
+                          >
+                            <Coins size={14} /> FABRICATE ({a.cost} CR)
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: FINISHERS */}
           {activeTab === 'finishers' && (
             <div className="space-y-3">
               <div className="p-3 rounded bg-red-950/30 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
@@ -417,14 +591,131 @@ export const ShopModal: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* TAB 5: AUDIO MIXER */}
+          {activeTab === 'audio' && (
+            <div className="space-y-6 max-w-2xl mx-auto py-2">
+              <div className="p-4 rounded-lg bg-amber-950/30 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Radio size={18} className="text-amber-400 shrink-0" />
+                  <span>
+                    SYNTHETIC DUAL-BUS AUDIO ENGINE: Adjust background procedural soundtrack and combat sound effects independently.
+                  </span>
+                </div>
+                <button
+                  onClick={toggleMute}
+                  className={`px-3 py-1.5 rounded text-xs font-bold font-['Chakra_Petch'] tracking-wider border transition flex items-center gap-1.5 ${
+                    isMuted
+                      ? 'bg-rose-950/80 border-rose-500 text-rose-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  {isMuted ? 'UNMUTE ALL' : 'MUTE ALL'}
+                </button>
+              </div>
+
+              <div className="space-y-5 bg-slate-950/50 p-6 rounded-xl border border-slate-800">
+                {/* 1. MASTER VOLUME */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-['Chakra_Petch'] font-bold text-white flex items-center gap-2">
+                      <Volume2 size={16} className="text-cyan-400" />
+                      MASTER VOLUME
+                    </label>
+                    <span className="font-mono text-sm font-bold text-cyan-400">
+                      {Math.round(masterVolume * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={masterVolume}
+                    onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                    <span>SILENT</span>
+                    <span>BALANCED</span>
+                    <span>MAXIMUM</span>
+                  </div>
+                </div>
+
+                {/* 2. MUSIC VOLUME */}
+                <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-['Chakra_Petch'] font-bold text-white flex items-center gap-2">
+                      <Music size={16} className="text-indigo-400" />
+                      BACKGROUND MUSIC VOLUME
+                    </label>
+                    <span className="font-mono text-sm font-bold text-indigo-400">
+                      {Math.round(musicVolume * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={musicVolume}
+                    onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-400"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Controls the dynamic cyberpunk synth soundtrack that intensifies as your combat style rank climbs.
+                  </p>
+                </div>
+
+                {/* 3. COMBAT SFX VOLUME */}
+                <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-['Chakra_Petch'] font-bold text-white flex items-center gap-2">
+                      <Volume1 size={16} className="text-amber-400" />
+                      COMBAT SFX VOLUME
+                    </label>
+                    <span className="font-mono text-sm font-bold text-amber-400">
+                      {Math.round(sfxVolume * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={sfxVolume}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setSfxVolume(v);
+                    }}
+                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                  />
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-slate-400">
+                      Controls hits, deflections, whooshes, executions, lasers, and boss roars.
+                    </p>
+                    <button
+                      onClick={() => soundEngine.playHit('heavy')}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-mono border border-amber-500/30 transition shrink-0"
+                    >
+                      TEST SFX
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-400">
-          <span>Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono">[B]</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono">[ESC]</kbd> to close</span>
+        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between text-xs text-slate-400">
+          <span>
+            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono">[B]</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono">[ESC]</kbd> to close
+          </span>
           <button
             onClick={() => setShopOpen(false)}
-            className="px-4 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-white font-['Chakra_Petch'] font-bold text-xs tracking-wider transition"
+            className="px-5 py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-['Chakra_Petch'] font-bold text-xs tracking-wider transition shadow-[0_0_12px_rgba(6,182,212,0.3)]"
           >
             RETURN TO ARENA
           </button>

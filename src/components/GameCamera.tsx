@@ -106,21 +106,25 @@ export const GameCamera: React.FC<GameCameraProps> = ({
       }
     }
 
-    // Screenshake
-    if (feedback.shakeDuration > 0 && feedback.shakeIntensity > 0) {
-      const shakeAmt = feedback.shakeIntensity;
-      const shakeX = (Math.sin(t * 45) + Math.cos(t * 33)) * shakeAmt;
-      const shakeY = (Math.cos(t * 52) + Math.sin(t * 28)) * shakeAmt;
-      const shakeZ = Math.sin(t * 39) * shakeAmt * 0.5;
-
-      desiredCamPos.current.x += shakeX;
-      desiredCamPos.current.y += shakeY;
-      desiredCamPos.current.z += shakeZ;
-    }
-
     // Smooth camera lag
     const lerpSpeed = executionCinematic.active ? 12.0 : 7.5;
     camera.position.lerp(desiredCamPos.current, lerpSpeed * clampedDelta);
+
+    // Visceral high-frequency trauma screenshake applied directly for maximum impact
+    if (feedback.shakeDuration > 0 && feedback.shakeIntensity > 0) {
+      const shakeAmt = feedback.shakeIntensity;
+      const shakeX = (Math.sin(t * 60) * 0.6 + Math.cos(t * 45) * 0.4) * shakeAmt;
+      const shakeY = (Math.cos(t * 70) * 0.6 + Math.sin(t * 35) * 0.4) * shakeAmt;
+      const shakeZ = (Math.sin(t * 50) * 0.5) * shakeAmt;
+
+      camera.position.x += shakeX;
+      camera.position.y += shakeY;
+      camera.position.z += shakeZ;
+
+      currentLookAt.current.x += shakeX * 0.3;
+      currentLookAt.current.y += shakeY * 0.3;
+    }
+
     camera.lookAt(currentLookAt.current);
   });
 

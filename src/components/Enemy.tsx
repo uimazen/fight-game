@@ -78,42 +78,46 @@ export const Enemy: React.FC<EnemyProps> = ({ data, isTargeted, canExecute }) =>
       {isTargeted && !isExecuted && (
         <group position={[0, 0.05, 0]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[1.0, 1.15, 24]} />
+            <ringGeometry args={data.type === 'boss' ? [1.8, 2.05, 32] : [1.0, 1.15, 24]} />
             <meshBasicMaterial color={canExecute ? '#ef4444' : '#38bdf8'} />
           </mesh>
         </group>
       )}
 
-      {/* Overhead Posture & Health Bar HUD (hidden during cinematic execution) */}
+      {/* Overhead Posture & Health Bar HUD (hidden for boss since HUD has top bar, but show [E] prompt) */}
       {!isExecuted && (
-        <Html position={[0, 2.35, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+        <Html position={[0, data.type === 'boss' ? 3.4 : 2.35, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
           <div className="flex flex-col items-center gap-1 w-24">
             {/* Execution Prompt [E] when posture broken */}
             {isPoiseBroken && (
-              <div className="animate-bounce bg-red-600 text-white font-extrabold px-2 py-0.5 rounded text-[11px] tracking-wider shadow-[0_0_12px_#ef4444] border border-red-300">
+              <div className="animate-bounce bg-red-600 text-white font-extrabold px-3 py-1 rounded text-xs tracking-wider shadow-[0_0_15px_#ef4444] border border-red-300 whitespace-nowrap">
                 [E] EXECUTE
               </div>
             )}
 
-            {/* Health Bar (Red/Orange) */}
-            <div className="w-full h-1.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-700/60 p-[1px]">
-              <div
-                className={`h-full transition-all duration-75 rounded-full ${
-                  data.type === 'brute' ? 'bg-orange-500' : 'bg-red-500'
-                }`}
-                style={{ width: `${healthPct}%` }}
-              />
-            </div>
+            {/* Health Bar (Red/Orange) - only for non-boss enemies */}
+            {data.type !== 'boss' && (
+              <>
+                <div className="w-full h-1.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-700/60 p-[1px]">
+                  <div
+                    className={`h-full transition-all duration-75 rounded-full ${
+                      data.type === 'brute' ? 'bg-orange-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${healthPct}%` }}
+                  />
+                </div>
 
-            {/* Posture / Poise Meter (Yellow / Gold) */}
-            <div className="w-full h-1 bg-slate-950/80 rounded-full overflow-hidden border border-slate-700/40">
-              <div
-                className={`h-full transition-all duration-75 rounded-full ${
-                  isPoiseBroken ? 'bg-red-400 animate-pulse' : 'bg-amber-400'
-                }`}
-                style={{ width: `${posturePct}%` }}
-              />
-            </div>
+                {/* Posture / Poise Meter (Yellow / Gold) */}
+                <div className="w-full h-1 bg-slate-950/80 rounded-full overflow-hidden border border-slate-700/40">
+                  <div
+                    className={`h-full transition-all duration-75 rounded-full ${
+                      isPoiseBroken ? 'bg-red-400 animate-pulse' : 'bg-amber-400'
+                    }`}
+                    style={{ width: `${posturePct}%` }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </Html>
       )}

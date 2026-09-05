@@ -5,7 +5,7 @@ import { CombatState, WeaponId, FinisherId } from '../types';
 
 interface GladiatorProps {
   isPlayer?: boolean;
-  enemyType?: 'grunt' | 'brute' | 'elite';
+  enemyType?: 'grunt' | 'brute' | 'elite' | 'boss';
   combatState: CombatState;
   animationProgress: number; // 0 to 1
   isInvulnerable?: boolean;
@@ -99,12 +99,15 @@ export const ProceduralGladiator: React.FC<GladiatorProps> = ({
   );
 
   // Role visual styling
+  const isBoss = enemyType === 'boss';
   const isBrute = enemyType === 'brute';
   const isElite = enemyType === 'elite';
-  const scale = isBrute ? 1.35 : isPlayer ? 1.05 : isElite ? 1.0 : 0.95;
+  const scale = isBoss ? 1.65 : isBrute ? 1.35 : isPlayer ? 1.05 : isElite ? 1.0 : 0.95;
 
   const armorColor = isPlayer
     ? '#0f172a'
+    : isBoss
+    ? '#09090b'
     : isBrute
     ? '#1c1917'
     : isElite
@@ -113,6 +116,8 @@ export const ProceduralGladiator: React.FC<GladiatorProps> = ({
 
   const accentColor = isPlayer
     ? '#0ea5e9'
+    : isBoss
+    ? '#ff0033'
     : isBrute
     ? '#ea580c'
     : isElite
@@ -123,6 +128,8 @@ export const ProceduralGladiator: React.FC<GladiatorProps> = ({
     ? '#38bdf8'
     : isTelegraphing
     ? '#ff0033'
+    : isBoss
+    ? '#ef4444'
     : isBrute
     ? '#fb923c'
     : isElite

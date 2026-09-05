@@ -10,11 +10,25 @@ import {
   FinisherId, 
   FinisherDef, 
   ExecutionCinematicState,
-  EnemyType
+  EnemyType,
+  AddonId,
+  AddonDef,
+  HitFXEvent,
+  HitFXType,
+  LaserBeamData
 } from '../types';
-import { INITIAL_WEAPONS, UPGRADE_CONFIGS, INITIAL_FINISHERS } from '../data/arsenal';
+import { INITIAL_WEAPONS, UPGRADE_CONFIGS, INITIAL_FINISHERS, INITIAL_ADDONS } from '../data/arsenal';
 
 export type StyleRank = 'D' | 'C' | 'B' | 'A' | 'S' | 'SSS';
+
+export const getComboMultiplier = (combo: number): number => {
+  if (combo >= 30) return 4.0;
+  if (combo >= 20) return 3.0;
+  if (combo >= 15) return 2.5;
+  if (combo >= 10) return 2.0;
+  if (combo >= 5) return 1.5;
+  return 1.0;
+};
 
 export interface CombatFeedback {
   shakeIntensity: number;
@@ -23,6 +37,16 @@ export interface CombatFeedback {
   hitstopRemaining: number;
   timeDilation: number;
   chromaticFlash: number;
+}
+
+export interface BossStateData {
+  id: string;
+  name: string;
+  health: number;
+  maxHealth: number;
+  posture: number;
+  maxPosture: number;
+  phase: number;
 }
 
 interface GameState {
@@ -46,6 +70,7 @@ interface GameState {
   weapons: Record<WeaponId, WeaponDef>;
   equippedWeapon: WeaponId;
   upgrades: Record<UpgradeId, number>; // current tier 0..5
+  addons: Record<AddonId, AddonDef>;
   finishers: Record<FinisherId, FinisherDef>;
   equippedFinisher: FinisherId;
   unlockedFinisherNotification: string | null;
@@ -60,6 +85,9 @@ interface GameState {
   waveBannerText: string | null;
   gameState: 'playing' | 'game_over' | 'victory';
 
+  // Boss Fight State
+  activeBoss: BossStateData | null;
+
   // Target Lock / Focus
   targetEnemyId: string | null;
   canExecuteTarget: boolean;
@@ -68,9 +96,14 @@ interface GameState {
   feedback: CombatFeedback;
   floatingTexts: FloatingText[];
   shockwaves: ShockwaveData[];
+  hitFXEvents: HitFXEvent[];
+  laserBeams: LaserBeamData[];
 
-  // Sound settings
+  // Audio Settings & Volumes
   isMuted: boolean;
+  masterVolume: number;
+  musicVolume: number;
+  sfxVolume: number;
 
   // Tutorial & Training Mode
   isTutorialActive: boolean;
@@ -78,8 +111,10 @@ interface GameState {
   tutorialSlowMo: boolean;
 
   // Actions
+  heal: (amount: number) => void;
   takeDamage: (amount: number, poiseDamage: number, isUnblockable?: boolean) => boolean; // returns true if blocked/parried
   parrySuccess: (enemyPos: [number, number, number]) => void;
+  triggerPerfectDodge: (playerPos: [number, number, number]) => void;
   registerHitLanded: (
     enemyId: string, 
     damage: number, 
@@ -90,12 +125,15 @@ interface GameState {
   triggerExecution: (enemyId: string, pos: [number, number, number]) => void;
   addFloatingText: (text: string, pos: [number, number, number], color?: string, scale?: number) => void;
   addShockwave: (pos: [number, number, number], color?: string, maxRadius?: number, duration?: number) => void;
+  triggerHitFX: (pos: [number, number, number], type: HitFXType, count?: number, color?: string) => void;
+  addLaserBeam: (beam: Omit<LaserBeamData, 'id' | 'createdAt' | 'progress'>) => void;
   triggerShake: (intensity: number, duration?: number) => void;
   triggerFovPunch: (fov?: number) => void;
   triggerHitstop: (durationMs: number) => void;
   setParrying: (parrying: boolean) => void;
   setIFrames: (active: boolean) => void;
   setTargetEnemy: (id: string | null, canExecute?: boolean) => void;
+  setBossStats: (stats: BossStateData | null) => void;
   updateComboTimer: (delta: number) => void;
   updateFeedback: (delta: number) => void;
   enemyKilled: () => void;
@@ -103,12 +141,17 @@ interface GameState {
   setWaveCleared: () => void;
   restartGame: () => void;
   toggleMute: () => void;
+  setMasterVolume: (val: number) => void;
+  setMusicVolume: (val: number) => void;
+  setSfxVolume: (val: number) => void;
 
   // Shop & Upgrades actions
   addCredits: (baseAmount: number) => void;
   buyWeapon: (id: WeaponId) => boolean;
   equipWeapon: (id: WeaponId) => void;
   buyUpgrade: (id: UpgradeId) => boolean;
+  buyAddon: (id: AddonId) => boolean;
+  toggleEquipAddon: (id: AddonId) => void;
   equipFinisher: (id: FinisherId) => void;
   checkFinisherUnlocks: () => void;
   clearFinisherNotification: () => void;
@@ -170,6 +213,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     dash: 0,
     credits: 0,
   },
+  addons: { ...INITIAL_ADDONS },
   finishers: { ...INITIAL_FINISHERS },
   equippedFinisher: 'omni_slash',
   unlockedFinisherNotification: null,
@@ -192,6 +236,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   waveBannerText: 'WAVE 1 // ENGAGE',
   gameState: 'playing',
 
+  // Boss Fight State
+  activeBoss: null,
+
   targetEnemyId: null,
   canExecuteTarget: false,
 
@@ -205,11 +252,28 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   floatingTexts: [],
   shockwaves: [],
+  hitFXEvents: [],
+  laserBeams: [],
+
+  // Audio Settings & Volumes
   isMuted: false,
+  masterVolume: 0.8,
+  musicVolume: 0.7,
+  sfxVolume: 0.85,
 
   isTutorialActive: false,
   tutorialStep: 0,
   tutorialSlowMo: true,
+
+  heal: (amount: number) => {
+    set((s) => {
+      const nextHp = Math.min(s.maxHealth, s.health + amount);
+      if (nextHp > 25) {
+        soundEngine.setLowHealth(false);
+      }
+      return { health: nextHp };
+    });
+  },
 
   takeDamage: (amount: number, poiseDamage: number, isUnblockable = false) => {
     const state = get();
@@ -239,8 +303,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // Drop combo on taking hit
     soundEngine.playHit(isUnblockable ? 'heavy' : 'medium');
-    get().triggerShake(isUnblockable ? 0.45 : 0.25, 0.25);
+    soundEngine.playBloodSplatter();
+    get().triggerShake(isUnblockable ? 0.6 : 0.35, 0.28);
     get().triggerFovPunch(54);
+    get().triggerHitFX([0, 1.0, 0], 'blood', 16, '#dc2626');
 
     // Audio tension check
     if (newHealth <= 25 && newHealth > 0) {
@@ -271,9 +337,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   parrySuccess: (enemyPos) => {
     soundEngine.playParry();
-    get().triggerShake(0.3, 0.2);
+    get().triggerShake(0.35, 0.22);
     get().triggerFovPunch(52);
-    get().triggerHitstop(120);
+    get().triggerHitstop(130);
+    get().triggerHitFX(enemyPos, 'parry_flash', 22, '#fbbf24');
 
     // Time dilation slow-mo matrix effect for 400ms
     set((s) => ({
@@ -303,7 +370,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         score: s.score + 250 * (s.combo + 1),
         combo: nextCombo,
-        comboTimer: 3.5,
+        comboTimer: 3.8,
         maxCombo: Math.max(s.maxCombo, nextCombo),
         styleRank: rank,
       };
@@ -313,6 +380,43 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().checkFinisherUnlocks();
   },
 
+  triggerPerfectDodge: (playerPos) => {
+    soundEngine.playPerfectDodge();
+    const hasChrono = get().addons.chrono_dodge?.equipped;
+    const dilation = hasChrono ? 0.2 : 0.32;
+    const durMs = hasChrono ? 1300 : 850;
+
+    get().triggerShake(0.32, 0.2);
+    get().triggerFovPunch(50);
+    get().addShockwave(playerPos, '#06b6d4', 4.8, 0.45);
+    get().addFloatingText(
+      hasChrono ? 'CHRONO DODGE! [TEMPORAL MATRIX]' : 'PERFECT DODGE! [BULLET TIME]',
+      [playerPos[0], playerPos[1] + 1.4, playerPos[2]],
+      '#22d3ee',
+      1.4
+    );
+    get().triggerHitFX(playerPos, 'spark', 16, '#22d3ee');
+
+    set((s) => ({
+      feedback: {
+        ...s.feedback,
+        timeDilation: dilation,
+        chromaticFlash: 0.75,
+      },
+    }));
+
+    setTimeout(() => {
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          timeDilation: 1.0,
+        },
+      }));
+    }, durMs);
+
+    get().addCredits(60);
+  },
+
   registerHitLanded: (_enemyId, damage, _postureDamage, pos, attackType) => {
     const isHeavy = attackType === 'heavy';
     const isFinisher = attackType === 'light_3';
@@ -320,37 +424,59 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Play synthesized sound
     soundEngine.playHit(isHeavy ? 'heavy' : isFinisher ? 'medium' : 'light');
 
-    // Juice & Feedback
-    const shakeIntensity = isHeavy ? 0.35 : isFinisher ? 0.25 : 0.12;
-    const hitstopDuration = isHeavy ? 100 : isFinisher ? 80 : 50;
-    get().triggerShake(shakeIntensity, isHeavy ? 0.2 : 0.14);
+    // Visceral Screenshake during heavy attacks
+    const shakeIntensity = isHeavy ? 0.55 : isFinisher ? 0.32 : 0.16;
+    const shakeDuration = isHeavy ? 0.3 : isFinisher ? 0.2 : 0.12;
+    get().triggerShake(shakeIntensity, shakeDuration);
+    const hitstopDuration = isHeavy ? 120 : isFinisher ? 85 : 50;
     get().triggerHitstop(hitstopDuration);
 
     if (isHeavy) {
-      get().triggerFovPunch(56);
-      get().addShockwave(pos, '#f59e0b', 3.0, 0.3);
+      get().triggerFovPunch(48);
+      get().addShockwave(pos, '#f59e0b', 3.5, 0.35);
+      get().triggerHitFX(pos, 'heavy_blast', 20, '#f59e0b');
+    } else {
+      get().triggerHitFX(pos, 'spark', 10, isFinisher ? '#ec4899' : '#38bdf8');
+    }
+
+    // Tesla Arc add-on bonus
+    if (get().addons.arc_chain?.equipped && isFinisher) {
+      soundEngine.playLaserBeam();
+      get().triggerHitFX(pos, 'laser_burn', 18, '#a855f7');
+      get().addShockwave(pos, '#a855f7', 4.0, 0.3);
     }
 
     // Floating damage & combo text
-    const text = isHeavy ? `CRIT ${damage}` : `${damage}`;
+    const text = isHeavy ? `HEAVY CRIT ${damage}` : `${damage}`;
     const color = isHeavy ? '#f59e0b' : isFinisher ? '#ec4899' : '#ffffff';
-    get().addFloatingText(text, [pos[0], pos[1] + 0.8, pos[2]], color, isHeavy ? 1.3 : 1.0);
+    get().addFloatingText(text, [pos[0], pos[1] + 0.8, pos[2]], color, isHeavy ? 1.4 : 1.0);
 
     set((s) => {
       const nextCombo = s.combo + 1;
-      const pts = (damage * 10) * Math.max(1, Math.floor(nextCombo / 3));
+      const mult = getComboMultiplier(nextCombo);
+      const pts = Math.round(damage * 10 * mult);
       const rank = getRank(nextCombo);
       soundEngine.updateMusicCombo(nextCombo, rank);
+
+      // Vampiric Leech Field Add-on
+      let currentHp = s.health;
+      if (s.addons.vampiric_core?.equipped && nextCombo % 10 === 0) {
+        currentHp = Math.min(s.maxHealth, currentHp + 4);
+        get().addFloatingText('+4 HP [VAMPIRIC LEECH]', [0, 1.8, 0], '#10b981', 1.2);
+      }
+
       return {
+        health: currentHp,
         score: s.score + pts,
         combo: nextCombo,
-        comboTimer: 3.5,
+        comboTimer: 3.8,
         maxCombo: Math.max(s.maxCombo, nextCombo),
         styleRank: rank,
       };
     });
 
-    get().addCredits(isHeavy ? 20 : isFinisher ? 15 : 6);
+    const mult = getComboMultiplier(get().combo);
+    get().addCredits(Math.round((isHeavy ? 24 : isFinisher ? 18 : 8) * mult));
     get().checkFinisherUnlocks();
   },
 
@@ -417,10 +543,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Climax detonation / sheath click!
       soundEngine.playSheathClick();
       soundEngine.playFinisherSlash('lethal');
-      get().triggerShake(0.65, 0.4);
-      get().triggerFovPunch(42);
-      get().triggerHitstop(140);
-      get().addShockwave(s.executionCinematic.targetPos, '#ef4444', 7.0, 0.6);
+      soundEngine.playBloodSplatter();
+      get().triggerShake(0.85, 0.5);
+      get().triggerFovPunch(38);
+      get().triggerHitstop(160);
+      get().triggerHitFX(s.executionCinematic.targetPos, 'blood', 38, '#dc2626');
+      get().addShockwave(s.executionCinematic.targetPos, '#ef4444', 7.5, 0.6);
       get().addFloatingText('FATAL CLIMAX!', [s.executionCinematic.targetPos[0], s.executionCinematic.targetPos[1] + 1.2, s.executionCinematic.targetPos[2]], '#ef4444', 1.8);
       set((st) => ({
         executionCinematic: { ...st.executionCinematic, climaxTriggered: true },
@@ -441,7 +569,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     const s = get();
     if (!s.executionCinematic.active) return; // Prevent duplicate termination calls
 
+    // Vampiric Core bonus on execution
+    let currentHp = s.health;
+    if (s.addons.vampiric_core?.equipped) {
+      currentHp = Math.min(s.maxHealth, currentHp + 12);
+      get().addFloatingText('+12 HP [VAMPIRIC DRAIN]', [0, 1.8, 0], '#10b981', 1.4);
+    }
+
     set((st) => ({
+      health: currentHp,
       feedback: {
         ...st.feedback,
         timeDilation: 1.0,
@@ -490,6 +626,45 @@ export const useGameStore = create<GameState>((set, get) => ({
         { id, position: pos, color, maxRadius, progress: 0, createdAt: performance.now(), duration },
       ],
     }));
+  },
+
+  triggerHitFX: (pos, type, count = 14, color) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    set((s) => ({
+      hitFXEvents: [
+        ...s.hitFXEvents.slice(-20),
+        { id, type, position: pos, count, color, createdAt: performance.now() },
+      ],
+    }));
+  },
+
+  addLaserBeam: (beam) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    set((s) => ({
+      laserBeams: [
+        ...s.laserBeams.slice(-10),
+        { ...beam, id, createdAt: performance.now(), progress: 0, isDangerous: beam.isDangerous ?? false },
+      ],
+    }));
+  },
+
+  setBossStats: (stats) => {
+    set({ activeBoss: stats });
+  },
+
+  setMasterVolume: (val: number) => {
+    soundEngine.setMasterVolume(val);
+    set({ masterVolume: val });
+  },
+
+  setMusicVolume: (val: number) => {
+    soundEngine.setMusicVolume(val);
+    set({ musicVolume: val });
+  },
+
+  setSfxVolume: (val: number) => {
+    soundEngine.setSfxVolume(val);
+    set({ sfxVolume: val });
   },
 
   triggerShake: (intensity, duration = 0.2) => {
@@ -563,6 +738,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         })
         .filter((sw) => sw.progress < 1);
 
+      // Clean hitFX events (< 450ms)
+      const validHitFX = s.hitFXEvents.filter((fx) => now - fx.createdAt < 450);
+
+      // Advance & clean laser beams
+      const validBeams = s.laserBeams
+        .map((beam) => {
+          const elapsed = (now - beam.createdAt) / 1000;
+          return { ...beam, progress: Math.min(1, elapsed / beam.duration) };
+        })
+        .filter((beam) => beam.progress < 1);
+
       return {
         feedback: {
           ...f,
@@ -574,6 +760,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
         floatingTexts: validTexts,
         shockwaves: validShockwaves,
+        hitFXEvents: validHitFX,
+        laserBeams: validBeams,
       };
     });
   },
@@ -617,16 +805,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   startNextWave: () => {
     set((s) => {
       const nextW = s.wave + 1;
+      const isBossWave = nextW % 5 === 0;
+      if (isBossWave) {
+        soundEngine.playBossRoar();
+      }
       return {
         wave: nextW,
         waveStatus: 'active',
-        waveBannerText: `WAVE ${nextW} // HOSTILE SQUAD DETECTED`,
+        waveBannerText: isBossWave
+          ? `WAVE ${nextW} // WARNING: APEX CYBER WARLORD // BOSS ENCOUNTER`
+          : `WAVE ${nextW} // HOSTILE SQUAD DETECTED`,
       };
     });
     get().checkFinisherUnlocks();
     setTimeout(() => {
       set({ waveBannerText: null });
-    }, 2200);
+    }, 2400);
   },
 
   // Shop & Progression
@@ -707,6 +901,47 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     get().addFloatingText(`${config.name} TIER ${nextTier}!`, [0, 2.0, 0], '#38bdf8', 1.3);
     return true;
+  },
+
+  buyAddon: (id) => {
+    const s = get();
+    const addon = s.addons[id];
+    if (!addon || addon.unlocked) return false;
+    if (s.credits < addon.cost) {
+      soundEngine.playGuardBreak();
+      return false;
+    }
+
+    soundEngine.playPurchase();
+    set((st) => ({
+      credits: st.credits - addon.cost,
+      addons: {
+        ...st.addons,
+        [id]: { ...addon, unlocked: true, equipped: true },
+      },
+    }));
+    get().addFloatingText(`PURCHASED: ${addon.name}`, [0, 2.0, 0], addon.color, 1.4);
+    return true;
+  },
+
+  toggleEquipAddon: (id) => {
+    const s = get();
+    const addon = s.addons[id];
+    if (!addon || !addon.unlocked) return;
+    soundEngine.playWeaponEquip();
+    const nextEquipped = !addon.equipped;
+    set((st) => ({
+      addons: {
+        ...st.addons,
+        [id]: { ...addon, equipped: nextEquipped },
+      },
+    }));
+    get().addFloatingText(
+      `${nextEquipped ? 'EQUIPPED' : 'UNEQUIPPED'}: ${addon.name}`,
+      [0, 2.0, 0],
+      addon.color,
+      1.2
+    );
   },
 
   equipFinisher: (id) => {
